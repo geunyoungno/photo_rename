@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import exifr from 'exifr';
+import * as ExifReader from 'exifreader';
 import { DateTime } from 'luxon';
 import chalk from 'chalk';
 
@@ -10,6 +11,14 @@ interface LivePhotoSet {
   video?: string;
 }
 
+interface RenameOptions {
+  path?: string;
+  timezone?: string;
+  dryRun?: boolean;
+}
+
+const STANDARD_TIMESTAMP_PATTERN = /^\d{8}_\d{6}(?:_\d{3})?(?:_\d+)?$/;
+const EXIF_DATETIME_FORMAT = 'yyyy:LL:dd HH:mm:ss';
 const filenameMap = new Map<string, number>();
 
 async function readFilenames(dir: string) {
@@ -21,9 +30,42 @@ async function readFilenames(dir: string) {
   }
 }
 
+function isStandardTimestampFilename(baseName: string) {
+  return STANDARD_TIMESTAMP_PATTERN.test(baseName);
+}
+
+function parseStandardTimestamp(baseName: string): { root: string; index: number } | null {
+  const match = baseName.match(/^(\d{8}_\d{6}(?:_\d{3})?)(?:_(\d+))?$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    root: match[1],
+    index: match[2] ? Number(match[2]) : 0,
+  };
+}
+
+function seedFilenameMap(filenames: string[]) {
+  filenameMap.clear();
+
+  for (const filename of filenames) {
+    const ext = path.extname(filename);
+    const baseName = path.basename(filename, ext);
+    const parsed = parseStandardTimestamp(baseName);
+
+    if (!parsed) {
+      continue;
+    }
+
+    const current = filenameMap.get(parsed.root) ?? 0;
+    const next = Math.max(current, parsed.index + 1);
+    filenameMap.set(parsed.root, next);
+  }
+}
+
 /**
- * 라이브 포토 페어를 감지합니다.
- * IMG_1234.HEIC와 IMG_1234.MOV 같은 패턴을 찾습니다.
+ * Detect live photo pairs like IMG_1234.HEIC + IMG_1234.MOV.
  */
 function groupLivePhotos(filenames: string[]): Map<string, LivePhotoSet> {
   const groups = new Map<string, LivePhotoSet>();
@@ -32,7 +74,6 @@ function groupLivePhotos(filenames: string[]): Map<string, LivePhotoSet> {
     const ext = path.extname(filename).toLowerCase();
     const baseName = path.basename(filename, path.extname(filename));
 
-    // IMG_XXXX 패턴 확인
     if (!baseName.startsWith('IMG_')) {
       continue;
     }
@@ -50,7 +91,6 @@ function groupLivePhotos(filenames: string[]): Map<string, LivePhotoSet> {
     }
   }
 
-  // 사진과 비디오 둘 다 없는 그룹 제거 (발생하지 않아야 하지만 방어 코드)
   for (const [key, group] of groups.entries()) {
     if (!group.photo && !group.video) {
       groups.delete(key);
@@ -60,37 +100,62 @@ function groupLivePhotos(filenames: string[]): Map<string, LivePhotoSet> {
   return groups;
 }
 
-async function getDateTimeFromFile(
-  filePath: string,
-  timezone: string
-): Promise<string | undefined> {
-  try {
-    // exifr이 모든 포맷을 자동 감지하도록 최소 옵션만 사용
-    const exif = await exifr.parse(filePath);
+function formatDateFromJsDate(date: Date, timezone: string) {
+  return DateTime.fromJSDate(date).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
+}
 
+function formatDateFromExifString(value: string, timezone: string) {
+  const dt = DateTime.fromFormat(value, EXIF_DATETIME_FORMAT, { zone: timezone });
+  return dt.isValid ? dt.toFormat('yyyyLLdd_HHmmss') : undefined;
+}
+
+async function getDateTimeFromExif(filePath: string, timezone: string): Promise<string | undefined> {
+  try {
+    const exif = await exifr.parse(filePath);
     const createDate = exif?.CreateDate;
     const dateTimeOriginal = exif?.DateTimeOriginal;
 
     if (createDate) {
-      return DateTime.fromJSDate(createDate).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
+      return formatDateFromJsDate(createDate, timezone);
     }
     if (dateTimeOriginal) {
-      return DateTime.fromJSDate(dateTimeOriginal).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
+      return formatDateFromJsDate(dateTimeOriginal, timezone);
     }
-
-    // EXIF 정보가 없으면 파일 수정 시간 사용
-    const stats = await fs.stat(filePath);
-    return DateTime.fromJSDate(stats.mtime).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
   } catch (error) {
-    // EXIF 파싱 실패 시 파일 수정 시간으로 폴백
-    console.warn(`Could not parse EXIF from ${path.basename(filePath)}, using file modification time`);
-    try {
-      const stats = await fs.stat(filePath);
-      return DateTime.fromJSDate(stats.mtime).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
-    } catch (statError) {
-      console.error(`Could not get date from ${path.basename(filePath)}:`, error);
-      return undefined;
+    // Ignore and fall back to other parsers or file metadata.
+  }
+
+  try {
+    const fileBuffer = await fs.readFile(filePath);
+    const tags = ExifReader.load(fileBuffer);
+    const dateTimeOriginal = tags['DateTimeOriginal']?.description;
+    const createDate = tags['CreateDate']?.description;
+    const value = dateTimeOriginal || createDate;
+
+    if (value) {
+      return formatDateFromExifString(value, timezone);
     }
+  } catch (error) {
+    // Ignore and fall back to file metadata.
+  }
+
+  return undefined;
+}
+
+async function getDateTimeFromFile(filePath: string, timezone: string): Promise<string | undefined> {
+  const exifDate = await getDateTimeFromExif(filePath, timezone);
+  if (exifDate) {
+    return exifDate;
+  }
+
+  console.warn(`No EXIF date in ${path.basename(filePath)}, using file modification time`);
+
+  try {
+    const stats = await fs.stat(filePath);
+    return formatDateFromJsDate(stats.mtime, timezone);
+  } catch (error) {
+    console.error(`Could not get date from ${path.basename(filePath)}:`, error);
+    return undefined;
   }
 }
 
@@ -101,19 +166,18 @@ function getUniqueFilename(baseName: string, ext: string): string {
   return count > 0 ? `${baseName}_${count}${ext}` : `${baseName}${ext}`;
 }
 
-interface IpadRenameOptions {
-  path?: string;
-  timezone?: string;
-  dryRun?: boolean;
-}
-
-export async function rename(options: IpadRenameOptions = {}) {
+export async function rename(options: RenameOptions = {}) {
   const { path: providedPath, timezone, dryRun = false } = options;
 
-  const resolvedTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const targetPath = providedPath || path.join(os.homedir(), 'Desktop', '100APPLE');
+  if (!providedPath) {
+    console.error(chalk.red('Error: --path is required for the unified rename command.'));
+    return;
+  }
 
-  console.log(`Starting iPad rename process in: ${chalk.cyan(targetPath)}`);
+  const resolvedTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const targetPath = providedPath || path.join(os.homedir(), 'Desktop');
+
+  console.log(`Starting rename process in: ${chalk.cyan(targetPath)}`);
   console.log(`Timezone: ${chalk.cyan(resolvedTimezone)}`);
   if (dryRun) {
     console.log(chalk.yellow('-- DRY RUN MODE --'));
@@ -125,9 +189,17 @@ export async function rename(options: IpadRenameOptions = {}) {
     return;
   }
 
+  seedFilenameMap(filenames);
+
   const livePhotoGroups = groupLivePhotos(filenames);
+  const groupedFiles = new Set<string>();
+  for (const group of livePhotoGroups.values()) {
+    if (group.photo) groupedFiles.add(group.photo);
+    if (group.video) groupedFiles.add(group.video);
+  }
+
   console.log(
-    `Found ${chalk.cyan(String(livePhotoGroups.size))} photo(s), including ${chalk.cyan(String(Array.from(livePhotoGroups.values()).filter((g) => g.video).length))} live photo pair(s)`
+    `Found ${chalk.cyan(String(filenames.length))} file(s), including ${chalk.cyan(String(Array.from(livePhotoGroups.values()).filter((g) => g.video).length))} live photo pair(s)`
   );
 
   let successCount = 0;
@@ -135,11 +207,9 @@ export async function rename(options: IpadRenameOptions = {}) {
   let errorCount = 0;
 
   for (const [, group] of livePhotoGroups.entries()) {
-    // 사진 파일이 있는 경우: 사진 기준으로 타임스탬프 결정
     if (group.photo) {
       const photoPath = path.join(targetPath, group.photo);
       const photoExt = path.extname(group.photo);
-
       const newBaseName = await getDateTimeFromFile(photoPath, resolvedTimezone);
 
       if (!newBaseName) {
@@ -150,7 +220,6 @@ export async function rename(options: IpadRenameOptions = {}) {
 
       const newPhotoName = getUniqueFilename(newBaseName, photoExt);
 
-      // 사진 파일 이름 변경
       if (dryRun) {
         console.log(`${chalk.blue('[DRY RUN]')} ${group.photo} -> ${chalk.green(newPhotoName)}`);
         successCount++;
@@ -163,16 +232,13 @@ export async function rename(options: IpadRenameOptions = {}) {
         } catch (error) {
           console.error(`${chalk.red('✖')} Failed to rename ${group.photo}:`, error);
           errorCount++;
-          continue; // 사진 이름 변경 실패 시 비디오도 건너뜀
+          continue;
         }
       }
 
-      // 라이브 포토의 MOV 파일 처리 (페어)
       if (group.video) {
         const videoPath = path.join(targetPath, group.video);
         const videoExt = path.extname(group.video);
-
-        // 사진과 동일한 기본 이름 사용 (카운트 포함)
         const newVideoBaseName = path.basename(newPhotoName, photoExt);
         const newVideoName = `${newVideoBaseName}${videoExt}`;
 
@@ -195,12 +261,9 @@ export async function rename(options: IpadRenameOptions = {}) {
           }
         }
       }
-    }
-    // 비디오만 있는 경우: 비디오 단독 처리
-    else if (group.video) {
+    } else if (group.video) {
       const videoPath = path.join(targetPath, group.video);
       const videoExt = path.extname(group.video);
-
       const newBaseName = await getDateTimeFromFile(videoPath, resolvedTimezone);
 
       if (!newBaseName) {
@@ -228,6 +291,53 @@ export async function rename(options: IpadRenameOptions = {}) {
           console.error(`${chalk.red('✖')} Failed to rename ${group.video}:`, error);
           errorCount++;
         }
+      }
+    }
+  }
+
+  for (const filename of filenames) {
+    if (groupedFiles.has(filename)) {
+      continue;
+    }
+
+    const ext = path.extname(filename);
+    const baseName = path.basename(filename, ext);
+
+    if (isStandardTimestampFilename(baseName)) {
+      console.log(`- Skipping (already standard format): ${filename}`);
+      skippedCount++;
+      continue;
+    }
+
+    const filePath = path.join(targetPath, filename);
+    const newBaseName = await getDateTimeFromFile(filePath, resolvedTimezone);
+
+    if (!newBaseName) {
+      console.log(`- Skipping ${filename} (could not determine date)`);
+      skippedCount++;
+      continue;
+    }
+
+    const newFilename = getUniqueFilename(newBaseName, ext);
+
+    if (newFilename === filename) {
+      console.log(`- Skipping (no change): ${filename}`);
+      skippedCount++;
+      continue;
+    }
+
+    if (dryRun) {
+      console.log(`${chalk.blue('[DRY RUN]')} ${filename} -> ${chalk.green(newFilename)}`);
+      successCount++;
+    } else {
+      try {
+        const newPath = path.join(targetPath, newFilename);
+        await fs.rename(filePath, newPath);
+        console.log(`${chalk.green('✔')} Renamed: ${filename} -> ${chalk.green(newFilename)}`);
+        successCount++;
+      } catch (error) {
+        console.error(`${chalk.red('✖')} Failed to rename ${filename}:`, error);
+        errorCount++;
       }
     }
   }

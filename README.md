@@ -1,12 +1,12 @@
 # 사진 이름 변경 CLI (v2)
 
-사진 및 동영상 파일의 메타데이터(EXIF) 또는 파일명 패턴을 기반으로 지능적으로 파일 이름을 변경하는 커맨드 라인 도구입니다.
+사진 및 동영상 파일의 메타데이터(EXIF)와 파일명 패턴을 기반으로 파일 이름을 변경하는 커맨드 라인 도구입니다.
 
-v2에서는 코드 구조를 전문적으로 리팩토링하여 확장성과 안정성을 높였으며, `dry-run` 모드와 같은 안전 장치를 추가하여 사용자 경험을 개선했습니다.
+현재 버전은 단일 명령어로 동작하며, 모든 파일을 동일한 규칙으로 처리합니다.
 
 ## 주요 기능
 
--   **전략 기반 이름 변경**: `general`, `foodie`, `kakao`, `ipad` 등 명확한 명령어로 각기 다른 이름 변경 로직(전략)을 실행합니다.
+-   **일관된 이름 변경 로직**: 파일명이 이미 `YYYYMMDD_HHMMSS`(옵션: 밀리초/중복번호) 형식이면 변경하지 않습니다.
 -   **EXIF 및 파일 수정 시간 활용**: 사진의 EXIF 데이터(촬영 시간)를 우선 사용하며, 정보가 없을 경우 파일의 최종 수정 시간을 기준으로 이름을 변경합니다.
 -   **라이브 포토 지원**: iPad의 라이브 포토(HEIC + MOV 페어)를 자동으로 감지하여 동일한 타임스탬프로 이름을 변경합니다.
 -   **안전한 실행 (Dry Run)**: `--dry-run` 플래그를 사용하여 실제 파일을 변경하기 전에 어떤 변경이 일어날지 미리 안전하게 확인할 수 있습니다.
@@ -29,7 +29,7 @@ v2에서는 코드 구조를 전문적으로 리팩토링하여 확장성과 안
 
 ## 사용법
 
-모든 기능은 단일 스크립트(`cli`)를 통해 실행됩니다. 명령어 뒤에 원하는 작업(전략)을 지정하고 필요한 옵션을 추가하는 방식입니다.
+모든 기능은 단일 스크립트(`cli`)와 단일 명령어로 실행됩니다.
 
 **기본 명령어 형식:**
 ```bash
@@ -41,91 +41,32 @@ npm run cli -- <명령어> [옵션]
 
 ### 명령어 및 옵션
 
-#### 1. `general`
-표준 사진 파일의 이름을 EXIF 데이터를 기반으로 변경합니다.
+#### `rename`
+지정한 폴더의 파일을 하나의 규칙으로 이름 변경합니다.
 
 **명령어:**
 ```bash
-npm run cli -- general --category <카테고리> [옵션]
+npm run cli -- rename --path <폴더경로> [옵션]
 ```
 **옵션:**
--   `-c, --category <값>`: **(필수)** 처리할 사진의 종류. `ipad`, `foodie`, `kakao` 중 하나를 지정하면 해당 하위 폴더에서 작동합니다.
--   `-p, --path <경로>`: 카테고리 폴더가 위치한 기본 경로. (기본값: 사용자의 홈 디렉토리)
+-   `-p, --path <경로>`: **(필수)** 처리할 폴더 경로.
 -   `-t, --timezone <시간대>`: 날짜 변환에 사용할 시간대. (예: `Asia/Seoul`, 기본값: 시스템 시간대)
 -   `--dry-run`: 가상 실행 모드. 파일 이름을 바꾸지 않고 결과만 출력합니다.
 
 **사용 예시:**
 ```bash
-# 바탕화면의 '100APPLE'(ipad) 폴더 사진을 서울 시간 기준으로 이름 변경 (실제 실행)
-npm run cli -- general --category ipad --path ~/Desktop --timezone Asia/Seoul
+# 바탕화면의 '100APPLE' 폴더 사진을 서울 시간 기준으로 이름 변경 (실제 실행)
+npm run cli -- rename --path ~/Desktop/100APPLE --timezone Asia/Seoul
 
 # 위와 동일한 작업을 가상으로 실행하여 결과만 확인
-npm run cli -- general --category ipad --path ~/Desktop --timezone Asia/Seoul --dry-run
-```
+npm run cli -- rename --path ~/Desktop/100APPLE --timezone Asia/Seoul --dry-run
 
----
-
-#### 2. `foodie`
-'Foodie' 앱으로 촬영한 `YYYY-MM-DD-...` 형식의 파일명을 가진 사진들을 위한 전용 명령어입니다.
-
-**명령어:**
-```bash
-npm run cli -- foodie [옵션]
-```
-**옵션:**
--   `-p, --path <경로>`: Foodie 사진이 들어있는 폴더 경로. (기본값: `~/Desktop/Foodie`)
--   `--dry-run`: 가상 실행 모드.
-
-**사용 예시:**
-```bash
-# 특정 백업 폴더에 있는 Foodie 사진들의 이름 변경
-npm run cli -- foodie --path /Users/my/Pictures/Foodie_Backup
-```
-
----
-
-#### 3. `kakao`
-카카오톡으로 주고받은 사진 및 동영상 파일을 위한 명령어입니다. EXIF 정보가 없으면 파일 수정 시간을 사용합니다.
-
-**명령어:**
-```bash
-npm run cli -- kakao [옵션]
-```
-**옵션:**
--   `-p, --path <경로>`: 카카오톡 미디어 파일이 저장된 폴더 경로. (기본값: `~/Desktop/Kakao`)
--   `--dry-run`: 가상 실행 모드.
-
-**사용 예시:**
-```bash
-# 기본 카카오톡 폴더에 있는 파일들의 이름을 가상으로 변경해보기
-npm run cli -- kakao --dry-run
-```
-
----
-
-#### 4. `ipad`
-iPad에서 가져온 사진과 라이브 포토를 위한 전용 명령어입니다. `IMG_XXXX.HEIC`와 `IMG_XXXX.MOV` 페어를 자동으로 감지하여 동일한 타임스탬프로 이름을 변경합니다.
-
-**명령어:**
-```bash
-npm run cli -- ipad [옵션]
-```
-**옵션:**
--   `-p, --path <경로>`: iPad 사진이 저장된 폴더 경로. (기본값: `~/Desktop/100APPLE`)
--   `-t, --timezone <시간대>`: 날짜 변환에 사용할 시간대. (예: `Asia/Seoul`, 기본값: 시스템 시간대)
--   `--dry-run`: 가상 실행 모드.
-
-**사용 예시:**
-```bash
-# 기본 경로의 iPad 사진들을 서울 시간 기준으로 이름 변경
-npm run cli -- ipad --timezone Asia/Seoul
-
-# 특정 폴더의 iPad 사진들을 가상으로 변경해보기
-npm run cli -- ipad --path ~/Pictures/iPad_Import --dry-run
+# WSL2에서 윈도우 바탕화면 경로를 사용하는 예시
+npm run cli -- rename --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE --timezone Asia/Seoul --dry-run
 ```
 
 **라이브 포토 처리:**
 -   `IMG_1234.HEIC`와 `IMG_1234.MOV`가 같은 폴더에 있으면 자동으로 라이브 포토로 인식
 -   두 파일 모두 동일한 타임스탬프로 변경 (예: `20240101_120000.HEIC`, `20240101_120000.MOV`)
 -   사진 파일의 EXIF 정보를 기준으로 타임스탬프 결정
--   MOV 파일만 있고 사진 파일이 없는 경우는 처리하지 않음
+-   MOV 파일만 있고 사진 파일이 없는 경우도 단독으로 처리
