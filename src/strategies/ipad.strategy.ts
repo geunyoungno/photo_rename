@@ -65,7 +65,9 @@ async function getDateTimeFromFile(
   timezone: string
 ): Promise<string | undefined> {
   try {
+    // exifr이 모든 포맷을 자동 감지하도록 최소 옵션만 사용
     const exif = await exifr.parse(filePath);
+
     const createDate = exif?.CreateDate;
     const dateTimeOriginal = exif?.DateTimeOriginal;
 
@@ -80,8 +82,15 @@ async function getDateTimeFromFile(
     const stats = await fs.stat(filePath);
     return DateTime.fromJSDate(stats.mtime).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
   } catch (error) {
-    console.error(`Could not get date from ${path.basename(filePath)}:`, error);
-    return undefined;
+    // EXIF 파싱 실패 시 파일 수정 시간으로 폴백
+    console.warn(`Could not parse EXIF from ${path.basename(filePath)}, using file modification time`);
+    try {
+      const stats = await fs.stat(filePath);
+      return DateTime.fromJSDate(stats.mtime).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
+    } catch (statError) {
+      console.error(`Could not get date from ${path.basename(filePath)}:`, error);
+      return undefined;
+    }
   }
 }
 
@@ -125,7 +134,7 @@ export async function rename(options: IpadRenameOptions = {}) {
   let skippedCount = 0;
   let errorCount = 0;
 
-  for (const [baseName, group] of livePhotoGroups.entries()) {
+  for (const [, group] of livePhotoGroups.entries()) {
     // 사진 파일이 있는 경우: 사진 기준으로 타임스탬프 결정
     if (group.photo) {
       const photoPath = path.join(targetPath, group.photo);
