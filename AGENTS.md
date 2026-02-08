@@ -4,7 +4,7 @@
 
 ## 프로젝트 요약
 
-Photo Rename CLI (v2) - 사진/동영상 파일의 EXIF 또는 파일명 패턴을 기반으로 이름을 변경하는 TypeScript CLI 도구입니다. 단일 명령어로 일관된 규칙을 적용합니다.
+Photo Rename CLI (v2) - 사진/동영상 파일의 EXIF 또는 파일명 패턴을 기반으로 이름 변경 및 월별 정리를 수행하는 TypeScript CLI 도구입니다.
 
 ## 주요 명령어
 
@@ -15,6 +15,7 @@ npm run cli -- <명령어> [옵션]
 # 사용 예시
 npm run cli -- rename --path ~/Desktop/100APPLE --timezone Asia/Seoul --dry-run
 npm run cli -- rename --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE --timezone Asia/Seoul --dry-run
+npm run cli -- organize --path ~/Desktop/100APPLE --dry-run
 ```
 
 ```bash
@@ -26,12 +27,13 @@ npm test -- --watch
 ## 아키텍처 요약
 
 - 진입점: `src/cli.ts`
-- 핵심 로직: `src/rename.ts`의 `rename()`
+- 핵심 로직: `src/rename.ts`의 `rename()`, `src/organize.ts`의 `organize()`
 - 표준 포맷이면 스킵: `YYYYMMDD_HHMMSS` (옵션: 밀리초/중복번호)
 - EXIF 우선순위: `exifr` → `exifreader` → 파일 수정 시간
 - 라이브 포토 페어링: `IMG_XXXX` 사진/비디오 동일 타임스탬프
 - 충돌 처리: `_1`, `_2` 접미사 (기존 표준 포맷 파일로 시드)
 - 시간대: Luxon, `--timezone` 옵션 지원
+- 월별 정리: 표준 파일명을 기준으로 `YYYY-MM` 폴더로 이동 (`organize`)
 
 ## 에이전트 가이드
 

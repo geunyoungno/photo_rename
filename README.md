@@ -70,3 +70,28 @@ npm run cli -- rename --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE 
 -   두 파일 모두 동일한 타임스탬프로 변경 (예: `20240101_120000.HEIC`, `20240101_120000.MOV`)
 -   사진 파일의 EXIF 정보를 기준으로 타임스탬프 결정
 -   MOV 파일만 있고 사진 파일이 없는 경우도 단독으로 처리
+
+---
+
+#### `organize`
+표준 파일명(`YYYYMMDD_HHMMSS` 옵션: 밀리초/중복번호)을 기준으로 `YYYY-MM` 폴더를 만들고 파일을 이동합니다.
+
+**명령어:**
+```bash
+npm run cli -- organize --path <폴더경로> [옵션]
+```
+**옵션:**
+-   `-p, --path <경로>`: **(필수)** 처리할 폴더 경로.
+-   `--dry-run`: 가상 실행 모드. 파일을 이동하지 않고 결과만 출력합니다.
+
+**사용 예시:**
+```bash
+# 바탕화면의 '100APPLE' 폴더를 월별 폴더로 정리 (실제 실행)
+npm run cli -- organize --path ~/Desktop/100APPLE
+
+# 위와 동일한 작업을 가상으로 실행하여 결과만 확인
+npm run cli -- organize --path ~/Desktop/100APPLE --dry-run
+
+# WSL2에서 윈도우 바탕화면 경로를 사용하는 예시
+npm run cli -- organize --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE --dry-run
+```
