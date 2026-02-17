@@ -7,7 +7,7 @@ interface OrganizeOptions {
   dryRun?: boolean;
 }
 
-const STANDARD_TIMESTAMP_PATTERN = /^\d{8}_\d{6}(?:_\d{3})?(?:_\d+)?$/;
+const STANDARD_TIMESTAMP_PATTERN = /^\d{8}_\d{6}(?:_\d{3})?(?:_\d+|\(\d+\))*$/;
 
 async function readFilenames(dir: string) {
   try {
@@ -23,14 +23,25 @@ function isStandardTimestampFilename(baseName: string) {
 }
 
 function parseStandardTimestamp(baseName: string): { root: string; index: number } | null {
-  const match = baseName.match(/^(\d{8}_\d{6}(?:_\d{3})?)(?:_(\d+))?$/);
+  // 괄호 형식 (n) 제거하고 root 추출
+  const normalized = baseName.replace(/\(\d+\)/g, '');
+  const match = normalized.match(/^(\d{8}_\d{6}(?:_\d{3})?)(?:_(\d+))?$/);
   if (!match) {
     return null;
   }
 
+  // 괄호 형식에서 최대 인덱스 추출
+  const parenMatches = baseName.match(/\((\d+)\)/g);
+  let parenIndex = 0;
+  if (parenMatches) {
+    parenIndex = Math.max(...parenMatches.map(m => Number(m.slice(1, -1))));
+  }
+
+  const underscoreIndex = match[2] ? Number(match[2]) : 0;
+
   return {
     root: match[1],
-    index: match[2] ? Number(match[2]) : 0,
+    index: Math.max(underscoreIndex, parenIndex),
   };
 }
 
