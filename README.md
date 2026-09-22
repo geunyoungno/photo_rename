@@ -13,7 +13,7 @@
 -   **안전한 실행 (Dry Run)**: `--dry-run` 플래그를 사용하여 실제 파일을 변경하기 전에 어떤 변경이 일어날지 미리 안전하게 확인할 수 있습니다.
 -   **직관적인 결과 확인**: 로그에 색상을 적용하고 실행이 끝나면 성공/실패/건너뜀 카운트를 요약 리포트로 보여주어 결과를 쉽게 파악할 수 있습니다.
 -   **이름 충돌 자동 해결**: 동일한 이름의 파일이 이미 존재할 경우, `_1`, `_2` 와 같은 숫자 접미사를 자동으로 추가하여 파일 덮어쓰기를 방지합니다.
--   **유연한 경로 및 시간대 설정**: 커맨드 라인 옵션을 통해 작업 경로와 시간대를 자유롭게 지정할 수 있으며, 지정하지 않을 경우 시스템의 기본값을 사용합니다.
+-   **시간대 변환 없음**: 기기가 기록한 시각을 그대로 사용합니다. 실행하는 머신의 시간대가 무엇이든 결과가 같습니다.
 
 ## 사전 요구사항
 
@@ -51,19 +51,18 @@ npm run cli -- rename --path <폴더경로> [옵션]
 ```
 **옵션:**
 -   `-p, --path <경로>`: **(필수)** 처리할 폴더 경로.
--   `-t, --timezone <시간대>`: 날짜 변환에 사용할 시간대. (예: `Asia/Seoul`, 기본값: 시스템 시간대)
 -   `--dry-run`: 가상 실행 모드. 파일 이름을 바꾸지 않고 결과만 출력합니다.
 
 **사용 예시:**
 ```bash
 # 바탕화면의 '100APPLE' 폴더 사진을 서울 시간 기준으로 이름 변경 (실제 실행)
-npm run cli -- rename --path ~/Desktop/100APPLE --timezone Asia/Seoul
+npm run cli -- rename --path ~/Desktop/100APPLE
 
 # 위와 동일한 작업을 가상으로 실행하여 결과만 확인
-npm run cli -- rename --path ~/Desktop/100APPLE --timezone Asia/Seoul --dry-run
+npm run cli -- rename --path ~/Desktop/100APPLE --dry-run
 
 # WSL2에서 윈도우 바탕화면 경로를 사용하는 예시
-npm run cli -- rename --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE --timezone Asia/Seoul --dry-run
+npm run cli -- rename --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE --dry-run
 ```
 
 **라이브 포토 처리:**

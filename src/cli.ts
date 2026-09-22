@@ -13,12 +13,10 @@ program
   .command('rename')
   .description('Rename photos and videos with a unified logic')
   .requiredOption('-p, --path <value>', 'Path to the target directory')
-  .option('-t, --timezone <value>', 'Timezone for date conversion')
   .option('--dry-run', 'Perform a dry run without actual renaming')
   .action((options) => {
     rename({
       path: options.path,
-      timezone: options.timezone,
       dryRun: options.dryRun,
     });
   });

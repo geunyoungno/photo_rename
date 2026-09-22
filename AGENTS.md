@@ -13,8 +13,8 @@ Photo Rename CLI (v2) - 사진/동영상 파일의 EXIF 또는 파일명 패턴�
 npm run cli -- <명령어> [옵션]
 
 # 사용 예시
-npm run cli -- rename --path ~/Desktop/100APPLE --timezone Asia/Seoul --dry-run
-npm run cli -- rename --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE --timezone Asia/Seoul --dry-run
+npm run cli -- rename --path ~/Desktop/100APPLE --dry-run
+npm run cli -- rename --path /mnt/c/Users/<윈도우사용자>/Desktop/100APPLE --dry-run
 npm run cli -- organize --path ~/Desktop/100APPLE --dry-run
 ```
 
@@ -34,7 +34,7 @@ npm test -- --watch
 - `mvhd` 는 제조사마다 UTC/현지가 갈린다. `udta` 표식으로 구분 (`MAKER_CLOCKS`) — DJI=UTC, OM System=현지. 모르는 기기는 UTC 로 보고 경고
 - 라이브 포토 페어링: `IMG_XXXX` 사진/비디오 동일 타임스탬프
 - 충돌 처리: `_1`, `_2` 접미사 (기존 표준 포맷 파일로 시드)
-- 시간대: Luxon, `--timezone` 옵션 지원
+- 시간대: 변환하지 않는다. 기기가 적은 벽시계를 그대로 쓴다 (머신 TZ 무관)
 - 월별 정리: 표준 파일명을 기준으로 `YYYY-MM` 폴더로 이동 (`organize`)
 
 ## 에이전트 가이드

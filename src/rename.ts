@@ -14,7 +14,6 @@ interface LivePhotoSet {
 
 interface RenameOptions {
   path?: string;
-  timezone?: string;
   dryRun?: boolean;
 }
 
@@ -101,16 +100,24 @@ function groupLivePhotos(filenames: string[]): Map<string, LivePhotoSet> {
   return groups;
 }
 
-function formatDateFromJsDate(date: Date, timezone: string) {
-  return DateTime.fromJSDate(date).setZone(timezone).toFormat('yyyyLLdd_HHmmss');
+/**
+ * 기기가 적어 둔 벽시계 숫자를 그대로 파일명 형식으로 만든다.
+ *
+ * 시간대 변환은 하지 않는다. EXIF 에는 시간대 정보가 없어서, exifr 은 '2026:09:17 10:59:17' 을
+ * 실행 머신의 시간대로 되살린다 (node_modules/exifr/src/dicts/tiff-revivers.mjs:52).
+ * 여기서 다른 시간대로 변환하면 같은 파일이 머신마다 다른 이름이 된다 — TZ=UTC 로 돌리면
+ * 9시간이 밀리는 걸 확인했다. 되살린 벽시계를 그대로 읽으면 어느 머신에서 돌려도 결과가 같다.
+ */
+export function formatDateFromJsDate(date: Date) {
+  return DateTime.fromJSDate(date).toFormat('yyyyLLdd_HHmmss');
 }
 
-function formatDateFromExifString(value: string, timezone: string) {
-  const dt = DateTime.fromFormat(value, EXIF_DATETIME_FORMAT, { zone: timezone });
-  return dt.isValid ? dt.toFormat('yyyyLLdd_HHmmss') : undefined;
+function formatDateFromExifString(value: string) {
+  const parsed = DateTime.fromFormat(value, EXIF_DATETIME_FORMAT);
+  return parsed.isValid ? parsed.toFormat('yyyyLLdd_HHmmss') : undefined;
 }
 
-async function getDateTimeFromExif(filePath: string, timezone: string): Promise<string | undefined> {
+async function getDateTimeFromExif(filePath: string): Promise<string | undefined> {
   // MP4/MOV 는 EXIF 가 아니라 moov 박스에 촬영 시각이 있다. exifr/exifreader 는 못 읽는다.
   if (isVideoExtension(path.extname(filePath))) {
     return getDateTimeFromVideo(filePath);
@@ -122,10 +129,10 @@ async function getDateTimeFromExif(filePath: string, timezone: string): Promise<
     const dateTimeOriginal = exif?.DateTimeOriginal;
 
     if (createDate) {
-      return formatDateFromJsDate(createDate, timezone);
+      return formatDateFromJsDate(createDate);
     }
     if (dateTimeOriginal) {
-      return formatDateFromJsDate(dateTimeOriginal, timezone);
+      return formatDateFromJsDate(dateTimeOriginal);
     }
   } catch (error) {
     // Ignore and fall back to other parsers or file metadata.
@@ -139,7 +146,7 @@ async function getDateTimeFromExif(filePath: string, timezone: string): Promise<
     const value = dateTimeOriginal || createDate;
 
     if (value) {
-      return formatDateFromExifString(value, timezone);
+      return formatDateFromExifString(value);
     }
   } catch (error) {
     // Ignore and fall back to file metadata.
@@ -148,8 +155,8 @@ async function getDateTimeFromExif(filePath: string, timezone: string): Promise<
   return undefined;
 }
 
-async function getDateTimeFromFile(filePath: string, timezone: string): Promise<string | undefined> {
-  const exifDate = await getDateTimeFromExif(filePath, timezone);
+async function getDateTimeFromFile(filePath: string): Promise<string | undefined> {
+  const exifDate = await getDateTimeFromExif(filePath);
   if (exifDate) {
     return exifDate;
   }
@@ -157,8 +164,9 @@ async function getDateTimeFromFile(filePath: string, timezone: string): Promise<
   console.warn(`No EXIF date in ${path.basename(filePath)}, using file modification time`);
 
   try {
+    // 수정 시각은 EXIF 와 달리 진짜 절대 시각이라, 머신의 현재 시간대로 읽는 게 맞다.
     const stats = await fs.stat(filePath);
-    return formatDateFromJsDate(stats.mtime, timezone);
+    return formatDateFromJsDate(stats.mtime);
   } catch (error) {
     console.error(`Could not get date from ${path.basename(filePath)}:`, error);
     return undefined;
@@ -173,18 +181,16 @@ function getUniqueFilename(baseName: string, ext: string): string {
 }
 
 export async function rename(options: RenameOptions = {}) {
-  const { path: providedPath, timezone, dryRun = false } = options;
+  const { path: providedPath, dryRun = false } = options;
 
   if (!providedPath) {
     console.error(chalk.red('Error: --path is required for the unified rename command.'));
     return;
   }
 
-  const resolvedTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const targetPath = providedPath || path.join(os.homedir(), 'Desktop');
 
   console.log(`Starting rename process in: ${chalk.cyan(targetPath)}`);
-  console.log(`Timezone: ${chalk.cyan(resolvedTimezone)}`);
   if (dryRun) {
     console.log(chalk.yellow('-- DRY RUN MODE --'));
   }
@@ -216,7 +222,7 @@ export async function rename(options: RenameOptions = {}) {
     if (group.photo) {
       const photoPath = path.join(targetPath, group.photo);
       const photoExt = path.extname(group.photo);
-      const newBaseName = await getDateTimeFromFile(photoPath, resolvedTimezone);
+      const newBaseName = await getDateTimeFromFile(photoPath);
 
       if (!newBaseName) {
         console.log(`- Skipping ${group.photo} (could not determine date)`);
@@ -270,7 +276,7 @@ export async function rename(options: RenameOptions = {}) {
     } else if (group.video) {
       const videoPath = path.join(targetPath, group.video);
       const videoExt = path.extname(group.video);
-      const newBaseName = await getDateTimeFromFile(videoPath, resolvedTimezone);
+      const newBaseName = await getDateTimeFromFile(videoPath);
 
       if (!newBaseName) {
         console.log(`- Skipping ${group.video} (could not determine date)`);
@@ -316,7 +322,7 @@ export async function rename(options: RenameOptions = {}) {
     }
 
     const filePath = path.join(targetPath, filename);
-    const newBaseName = await getDateTimeFromFile(filePath, resolvedTimezone);
+    const newBaseName = await getDateTimeFromFile(filePath);
 
     if (!newBaseName) {
       console.log(`- Skipping ${filename} (could not determine date)`);
