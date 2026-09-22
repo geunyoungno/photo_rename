@@ -29,7 +29,9 @@ npm test -- --watch
 - 진입점: `src/cli.ts`
 - 핵심 로직: `src/rename.ts`의 `rename()`, `src/organize.ts`의 `organize()`
 - 표준 포맷이면 스킵: `YYYYMMDD_HHMMSS` (옵션: 밀리초/중복번호)
-- EXIF 우선순위: `exifr` → `exifreader` → 파일 수정 시간
+- 사진 날짜 우선순위: `exifr` → `exifreader` → 파일 수정 시간
+- 동영상 날짜: `moov` 박스 직접 파싱 (`src/mp4-date.ts`) — `udta/©day` → `mvhd` 순
+- `mvhd` 는 제조사마다 UTC/현지가 갈린다. `udta` 표식으로 구분 (`MAKER_CLOCKS`) — DJI=UTC, OM System=현지. 모르는 기기는 UTC 로 보고 경고
 - 라이브 포토 페어링: `IMG_XXXX` 사진/비디오 동일 타임스탬프
 - 충돌 처리: `_1`, `_2` 접미사 (기존 표준 포맷 파일로 시드)
 - 시간대: Luxon, `--timezone` 옵션 지원

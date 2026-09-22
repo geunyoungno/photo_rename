@@ -5,6 +5,7 @@ import exifr from 'exifr';
 import * as ExifReader from 'exifreader';
 import { DateTime } from 'luxon';
 import chalk from 'chalk';
+import { getDateTimeFromVideo, isVideoExtension } from './mp4-date';
 
 interface LivePhotoSet {
   photo?: string;
@@ -110,6 +111,11 @@ function formatDateFromExifString(value: string, timezone: string) {
 }
 
 async function getDateTimeFromExif(filePath: string, timezone: string): Promise<string | undefined> {
+  // MP4/MOV 는 EXIF 가 아니라 moov 박스에 촬영 시각이 있다. exifr/exifreader 는 못 읽는다.
+  if (isVideoExtension(path.extname(filePath))) {
+    return getDateTimeFromVideo(filePath);
+  }
+
   try {
     const exif = await exifr.parse(filePath);
     const createDate = exif?.CreateDate;

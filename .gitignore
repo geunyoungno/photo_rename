@@ -11,3 +11,6 @@ yarn-error.log*
 
 # Build output
 /dist
+
+# Test media (대용량 원본 파일)
+testcase/
